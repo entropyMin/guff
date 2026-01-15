@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Flappy Bird 本地小游戏</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+        background: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+        color: #f8fafc;
+      }
+
+      .container {
+        text-align: center;
+        padding: 24px;
+        background: rgba(15, 23, 42, 0.6);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 16px;
+        box-shadow: 0 24px 40px rgba(15, 23, 42, 0.4);
+      }
+
+      canvas {
+        background: linear-gradient(180deg, #38bdf8 0%, #0ea5e9 45%, #0f172a 100%);
+        border-radius: 16px;
+        display: block;
+      }
+
+      .hud {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        font-size: 14px;
+        color: #e2e8f0;
+      }
+
+      .help {
+        margin-top: 12px;
+        font-size: 13px;
+        color: #94a3b8;
+      }
+
+      button {
+        margin-top: 12px;
+        padding: 8px 16px;
+        border-radius: 999px;
+        border: none;
+        background: #38bdf8;
+        color: #0f172a;
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      button:hover {
+        background: #7dd3fc;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <canvas id="game" width="420" height="520"></canvas>
+      <div class="hud">
+        <span id="score">得分：0</span>
+        <span id="best">最佳：0</span>
+      </div>
+      <button id="restart">重新开始</button>
+      <div class="help">按空格 / 点击屏幕让小鸟飞起来。</div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById("game");
+      const ctx = canvas.getContext("2d");
+      const scoreEl = document.getElementById("score");
+      const bestEl = document.getElementById("best");
+      const restartBtn = document.getElementById("restart");
+
+      const game = {
+        state: "ready",
+        score: 0,
+        best: Number(localStorage.getItem("flappy-best")) || 0,
+        gravity: 0.42,
+        flapStrength: -7.5,
+        speed: 2.4,
+        gap: 140,
+        pipeWidth: 64,
+        pipeSpacing: 190,
+        bird: {
+          x: 120,
+          y: 260,
+          radius: 16,
+          velocity: 0,
+          tilt: 0,
+        },
+        pipes: [],
+        frame: 0,
+      };
+
+      const resetGame = () => {
+        game.state = "ready";
+        game.score = 0;
+        game.bird.y = 260;
+        game.bird.velocity = 0;
+        game.bird.tilt = 0;
+        game.pipes = [];
+        game.frame = 0;
+        updateHud();
+      };
+
+      const startGame = () => {
+        if (game.state !== "ready") return;
+        game.state = "running";
+        spawnPipe();
+      };
+
+      const updateHud = () => {
+        scoreEl.textContent = `得分：${game.score}`;
+        bestEl.textContent = `最佳：${game.best}`;
+      };
+
+      const spawnPipe = () => {
+        const topHeight = 60 + Math.random() * 200;
+        game.pipes.push({
+          x: canvas.width + 40,
+          top: topHeight,
+          passed: false,
+        });
+      };
+
+      const flap = () => {
+        if (game.state === "over") {
+          resetGame();
+          return;
+        }
+        startGame();
+        game.bird.velocity = game.flapStrength;
+      };
+
+      const checkCollision = (pipe) => {
+        const bird = game.bird;
+        const withinX = bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + game.pipeWidth;
+        if (!withinX) return false;
+        const gapTop = pipe.top;
+        const gapBottom = pipe.top + game.gap;
+        const hitTop = bird.y - bird.radius < gapTop;
+        const hitBottom = bird.y + bird.radius > gapBottom;
+        return hitTop || hitBottom;
+      };
+
+      const update = () => {
+        if (game.state === "running") {
+          game.bird.velocity += game.gravity;
+          game.bird.y += game.bird.velocity;
+          game.bird.tilt = Math.min(game.bird.velocity * 4, 18);
+
+          if (game.frame % Math.floor(game.pipeSpacing / game.speed) === 0) {
+            spawnPipe();
+          }
+
+          game.pipes.forEach((pipe) => {
+            pipe.x -= game.speed;
+            if (!pipe.passed && pipe.x + game.pipeWidth < game.bird.x) {
+              pipe.passed = true;
+              game.score += 1;
+              if (game.score > game.best) {
+                game.best = game.score;
+                localStorage.setItem("flappy-best", game.best);
+              }
+              updateHud();
+            }
+          });
+
+          game.pipes = game.pipes.filter((pipe) => pipe.x + game.pipeWidth > -20);
+
+          const hitPipe = game.pipes.some((pipe) => checkCollision(pipe));
+          const hitGround = game.bird.y + game.bird.radius > canvas.height - 40;
+          const hitSky = game.bird.y - game.bird.radius < 0;
+
+          if (hitPipe || hitGround || hitSky) {
+            game.state = "over";
+          }
+        }
+
+        if (game.state === "over") {
+          game.bird.velocity += game.gravity * 0.8;
+          game.bird.y += game.bird.velocity;
+          game.bird.tilt = Math.min(game.bird.velocity * 4, 28);
+        }
+
+        game.frame += 1;
+      };
+
+      const draw = () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        drawBackdrop();
+        drawGround();
+        drawPipes();
+        drawBird();
+        drawOverlay();
+      };
+
+      const drawBackdrop = () => {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+        for (let i = 0; i < 6; i += 1) {
+          ctx.beginPath();
+          ctx.ellipse(60 + i * 70, 80 + (i % 2) * 20, 32, 16, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      };
+
+      const drawGround = () => {
+        ctx.fillStyle = "#1e293b";
+        ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+        ctx.fillStyle = "#94a3b8";
+        for (let i = 0; i < canvas.width; i += 32) {
+          ctx.fillRect(i, canvas.height - 32, 16, 8);
+        }
+      };
+
+      const drawPipes = () => {
+        game.pipes.forEach((pipe) => {
+          ctx.fillStyle = "#22c55e";
+          ctx.fillRect(pipe.x, 0, game.pipeWidth, pipe.top);
+          ctx.fillRect(pipe.x, pipe.top + game.gap, game.pipeWidth, canvas.height - pipe.top - game.gap - 40);
+
+          ctx.fillStyle = "#15803d";
+          ctx.fillRect(pipe.x, pipe.top - 12, game.pipeWidth, 12);
+          ctx.fillRect(pipe.x, pipe.top + game.gap, game.pipeWidth, 12);
+        });
+      };
+
+      const drawBird = () => {
+        const { x, y, radius } = game.bird;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((Math.PI / 180) * game.bird.tilt);
+
+        ctx.fillStyle = "#fbbf24";
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#0f172a";
+        ctx.beginPath();
+        ctx.arc(6, -4, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = "#fb7185";
+        ctx.beginPath();
+        ctx.moveTo(radius, 0);
+        ctx.lineTo(radius + 10, 4);
+        ctx.lineTo(radius, 8);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.restore();
+      };
+
+      const drawOverlay = () => {
+        if (game.state === "ready") {
+          drawCenteredText("Flappy Bird", 42, 220);
+          drawCenteredText("按空格开始", 18, 260);
+        }
+        if (game.state === "over") {
+          drawCenteredText("游戏结束", 32, 220);
+          drawCenteredText("点击重新开始", 18, 260);
+        }
+      };
+
+      const drawCenteredText = (text, size, y) => {
+        ctx.save();
+        ctx.fillStyle = "rgba(15, 23, 42, 0.8)";
+        ctx.font = `bold ${size}px "PingFang SC", "Microsoft YaHei", sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText(text, canvas.width / 2, y);
+        ctx.restore();
+      };
+
+      const loop = () => {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+      };
+
+      window.addEventListener("keydown", (event) => {
+        if (event.code === "Space") {
+          event.preventDefault();
+          flap();
+        }
+      });
+
+      canvas.addEventListener("pointerdown", () => {
+        flap();
+      });
+
+      restartBtn.addEventListener("click", () => {
+        resetGame();
+      });
+
+      updateHud();
+      loop();
+    </script>
+  </body>
+</html>
