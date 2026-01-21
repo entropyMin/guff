@@ -26,7 +26,6 @@
         border: 1px solid rgba(148, 163, 184, 0.2);
         border-radius: 16px;
         box-shadow: 0 24px 40px rgba(15, 23, 42, 0.4);
-        position: relative;
       }
 
       canvas {
@@ -43,13 +42,6 @@
         color: #e2e8f0;
       }
 
-      .controls {
-        display: flex;
-        justify-content: center;
-        gap: 12px;
-        margin-top: 12px;
-      }
-
       .help {
         margin-top: 12px;
         font-size: 13px;
@@ -57,6 +49,7 @@
       }
 
       button {
+        margin-top: 12px;
         padding: 8px 16px;
         border-radius: 999px;
         border: none;
@@ -69,38 +62,6 @@
       button:hover {
         background: #7dd3fc;
       }
-
-      .bonus-indicator {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-size: 32px;
-        font-weight: bold;
-        color: #fbbf24;
-        text-shadow: 0 0 10px rgba(251, 191, 36, 0.8), 0 0 20px rgba(251, 191, 36, 0.5);
-        pointer-events: none;
-        opacity: 0;
-      }
-
-      .bonus-indicator.show {
-        animation: bonusPulse 0.8s ease-out;
-      }
-
-      @keyframes bonusPulse {
-        0% {
-          opacity: 1;
-          transform: translate(-50%, -50%) scale(0.5);
-        }
-        50% {
-          opacity: 1;
-          transform: translate(-50%, -50%) scale(1.2);
-        }
-        100% {
-          opacity: 0;
-          transform: translate(-50%, -50%) scale(1);
-        }
-      }
     </style>
   </head>
   <body>
@@ -109,19 +70,9 @@
       <div class="hud">
         <span id="score">得分：0</span>
         <span id="best">最佳：0</span>
-        <span id="lives">生命：1</span>
       </div>
-      <div class="controls">
-        <button id="restart">重新开始</button>
-        <button id="toggle-mode">切换到困难模式</button>
-      </div>
-      <div class="help">
-        按空格 / 点击屏幕让小鸟飞起来。<br>
-        <span style="font-size: 11px; color: #64748b;">
-          提示：困难模式10分后出现双间隙管道 | URL参数 ?doublegap=1 可强制开启
-        </span>
-      </div>
-      <div id="bonus-indicator" class="bonus-indicator"></div>
+      <button id="restart">重新开始</button>
+      <div class="help">按空格 / 点击屏幕让小鸟飞起来。</div>
     </div>
 
     <script>
@@ -129,33 +80,18 @@
       const ctx = canvas.getContext("2d");
       const scoreEl = document.getElementById("score");
       const bestEl = document.getElementById("best");
-      const livesEl = document.getElementById("lives");
       const restartBtn = document.getElementById("restart");
-      const toggleModeBtn = document.getElementById("toggle-mode");
-      const bonusIndicator = document.getElementById("bonus-indicator");
-      const demoDoubleGap = new URLSearchParams(window.location.search).get("doublegap") === "1";
-
-      const bestKey = (mode) => `flappy-best-${mode}`;
 
       const game = {
         state: "ready",
         score: 0,
-        best: 0,
-        lives: 1,
-        invincibleUntil: 0,
+        best: Number(localStorage.getItem("flappy-best")) || 0,
         gravity: 0.42,
         flapStrength: -7.5,
         speed: 2.4,
         gap: 140,
         pipeWidth: 64,
         pipeSpacing: 190,
-        minSpacing: 150,
-        mode: "normal",
-        movingChance: 0,
-        moveAmplitude: 0,
-        moveSpeed: 0,
-        moveAmplitudeX: 0,
-        moveSpeedX: 0,
         bird: {
           x: 120,
           y: 260,
@@ -165,77 +101,16 @@
         },
         pipes: [],
         frame: 0,
-        lastLifeScore: 0,
-        cheatEnabled: false,
-        cheatInput: "",
-        cheatTimeout: null,
-        inBonusStage: false,
-        bonusStageProgress: 0,
-        nextBonusCheck: 60,
-      };
-
-      const applyMode = (mode) => {
-        game.mode = mode;
-        if (mode === "hard") {
-          game.speed = 2.8;
-          game.gap = 125;
-          game.pipeSpacing = 170;
-          game.minSpacing = 140;
-          game.movingChance = 0.45;
-          game.moveAmplitude = 42;
-          game.moveSpeed = 0.025;
-          game.moveAmplitudeX = 18;
-          game.moveSpeedX = 0.03;
-          toggleModeBtn.textContent = "切换到普通模式";
-        } else {
-          game.speed = 2.4;
-          game.gap = 140;
-          game.pipeSpacing = 190;
-          game.minSpacing = 150;
-          game.movingChance = 0;
-          game.moveAmplitude = 0;
-          game.moveSpeed = 0;
-          game.moveAmplitudeX = 0;
-          game.moveSpeedX = 0;
-          toggleModeBtn.textContent = "切换到困难模式";
-        }
-        game.best = Number(localStorage.getItem(bestKey(mode))) || 0;
-        updateHud();
-      };
-
-      const getDifficultyConfig = () => {
-        const tier = game.mode === "hard" ? Math.floor(game.score / 20) : 0;
-        const tierBoost = Math.min(tier, 5);
-        const speed = game.speed * (1 + tierBoost * 0.08);
-        const pipeSpacing = Math.max(120, game.pipeSpacing - tierBoost * 10);
-        const minSpacing = Math.max(100, game.minSpacing - tierBoost * 5);
-        const moveSpeed = game.moveSpeed * (1 + tierBoost * 0.12);
-        const moveSpeedX = game.moveSpeedX * (1 + tierBoost * 0.12);
-
-        return {
-          speed,
-          pipeSpacing,
-          minSpacing,
-          moveSpeed,
-          moveSpeedX,
-          tier,
-        };
       };
 
       const resetGame = () => {
         game.state = "ready";
         game.score = 0;
-        game.lives = 1;
-        game.invincibleUntil = 0;
         game.bird.y = 260;
         game.bird.velocity = 0;
         game.bird.tilt = 0;
         game.pipes = [];
         game.frame = 0;
-        game.lastLifeScore = 0;
-        game.inBonusStage = false;
-        game.bonusStageProgress = 0;
-        game.nextBonusCheck = 60;
         updateHud();
       };
 
@@ -248,227 +123,14 @@
       const updateHud = () => {
         scoreEl.textContent = `得分：${game.score}`;
         bestEl.textContent = `最佳：${game.best}`;
-        livesEl.textContent = `生命：${game.lives}`;
-      };
-
-      const showBonusIndicator = (text) => {
-        bonusIndicator.textContent = text;
-        bonusIndicator.classList.remove("show");
-        void bonusIndicator.offsetWidth;
-        bonusIndicator.classList.add("show");
-      };
-
-      const createDoubleGaps = (minTop, maxTop) => {
-        const gapHeight = game.gap;
-        const minSegment = 40;
-
-        const totalAvailableSpace = maxTop - minTop;
-        const requiredSpace = gapHeight * 2 + minSegment;
-
-        if (totalAvailableSpace < requiredSpace) {
-          return [
-            {
-              top: minTop + Math.random() * (maxTop - minTop),
-              height: gapHeight,
-            },
-          ];
-        }
-
-        const layoutMode = Math.floor(Math.random() * 3);
-
-        let firstGapTop;
-        let secondGapTop;
-
-        if (layoutMode === 0) {
-          const flexSpace = totalAvailableSpace - gapHeight * 2;
-
-          const topRatio = 0.2 + Math.random() * 0.2;
-          const topPipe = flexSpace * topRatio;
-
-          const midRatio = 0.3 + Math.random() * 0.3;
-          const midPipe = Math.max(minSegment, flexSpace * midRatio);
-
-          firstGapTop = minTop + topPipe;
-          secondGapTop = firstGapTop + gapHeight + midPipe;
-        } else if (layoutMode === 1) {
-          const flexSpace = totalAvailableSpace - gapHeight * 2;
-
-          const topRatio = 0.1 + Math.random() * 0.15;
-          const topPipe = flexSpace * topRatio;
-
-          const midRatio = 0.15 + Math.random() * 0.25;
-          const midPipe = Math.max(minSegment, flexSpace * midRatio);
-
-          firstGapTop = minTop + topPipe;
-          secondGapTop = firstGapTop + gapHeight + midPipe;
-        } else {
-          const flexSpace = totalAvailableSpace - gapHeight * 2;
-
-          const topRatio = 0.3 + Math.random() * 0.3;
-          const topPipe = flexSpace * topRatio;
-
-          const midRatio = 0.2 + Math.random() * 0.2;
-          const midPipe = Math.max(minSegment, flexSpace * midRatio);
-
-          firstGapTop = minTop + topPipe;
-          secondGapTop = firstGapTop + gapHeight + midPipe;
-        }
-
-        return [
-          {
-            top: firstGapTop,
-            height: gapHeight,
-          },
-          {
-            top: secondGapTop,
-            height: gapHeight,
-          },
-        ];
-      };
-
-      const createTunnelGaps = (minTop, maxTop) => {
-        const gapHeight = game.gap;
-        const numTunnels = 1 + Math.floor(Math.random() * 2);
-        const gaps = [];
-
-        const availableHeight = maxTop - minTop;
-        const tunnelSpacing = 60;
-
-        if (numTunnels === 1) {
-          const centerBias = 0.3;
-          const center = (minTop + maxTop) / 2;
-          const range = (maxTop - minTop - gapHeight) * (1 - centerBias);
-          const offset = (Math.random() - 0.5) * range;
-          gaps.push({
-            top: center - gapHeight / 2 + offset,
-            height: gapHeight,
-          });
-        } else {
-          const totalRequired = gapHeight * 2 + tunnelSpacing;
-          if (availableHeight >= totalRequired) {
-            const spacing = (availableHeight - gapHeight * 2) / 3;
-            gaps.push({
-              top: minTop + spacing,
-              height: gapHeight,
-            });
-            gaps.push({
-              top: minTop + spacing * 2 + gapHeight,
-              height: gapHeight,
-            });
-          } else {
-            gaps.push({
-              top: minTop + (maxTop - minTop - gapHeight) / 2,
-              height: gapHeight,
-            });
-          }
-        }
-
-        return gaps;
-      };
-
-      const spawnBonusStagePipes = () => {
-        const minTop = 30;
-        const maxTop = canvas.height - game.gap - 60;
-        const numPipes = 5;
-        const pipeSpacing = 10;
-
-        const tunnelGaps = createTunnelGaps(minTop, maxTop);
-
-        for (let i = 0; i < numPipes; i++) {
-          const baseX = canvas.width + 40 + i * (game.pipeWidth + pipeSpacing);
-
-          game.pipes.push({
-            baseX,
-            x: baseX,
-            baseTop: tunnelGaps[0].top,
-            top: tunnelGaps[0].top,
-            gaps: JSON.parse(JSON.stringify(tunnelGaps)),
-            spacing: pipeSpacing,
-            movingY: false,
-            movingX: false,
-            phaseY: 0,
-            phaseX: 0,
-            tierIndex: 0,
-            passed: false,
-            initialGaps: JSON.parse(JSON.stringify(tunnelGaps)),
-            isBonusPipe: true,
-          });
-        }
-
-        game.inBonusStage = true;
-        game.bonusStageProgress = 0;
-        showBonusIndicator("🎁 奖励隧道！");
       };
 
       const spawnPipe = () => {
-        if (!game.inBonusStage && game.score >= game.nextBonusCheck && game.score >= 40) {
-          if (Math.random() < 0.2) {
-            spawnBonusStagePipes();
-            game.nextBonusCheck = Math.ceil((game.score + 1) / 20) * 20 + 20;
-            return;
-          }
-          game.nextBonusCheck = Math.ceil((game.score + 1) / 20) * 20 + 20;
-        }
-
-        if (game.inBonusStage) {
-          return;
-        }
-
-        const difficulty = getDifficultyConfig();
-        const tierIndex = difficulty.tier;
-
-        const minTop = 30;
-        const maxTop = canvas.height - game.gap - 60;
-
-        let baseTop = minTop + Math.random() * (maxTop - minTop);
-        const spacingVariance = game.mode === "hard" ? Math.random() * 30 - 20 : 0;
-        const spacing = Math.max(difficulty.minSpacing, difficulty.pipeSpacing + spacingVariance);
-        const movingY = Math.random() < game.movingChance;
-        const movingX = Math.random() < game.movingChance;
-        const baseX = canvas.width + 40;
-
-        let doubleGapChance = 0;
-        if (demoDoubleGap) {
-          doubleGapChance = 1;
-        } else if (game.mode === "hard") {
-          if (game.score >= 30) {
-            doubleGapChance = 0.5;
-          } else if (game.score >= 10) {
-            doubleGapChance = 0.3;
-          }
-        } else if (game.score >= 20) {
-          doubleGapChance = 0.2;
-        }
-
-        const useDoubleGap = Math.random() < doubleGapChance;
-
-        const gaps = useDoubleGap
-          ? createDoubleGaps(minTop, maxTop)
-          : [
-              {
-                top: baseTop,
-                height: game.gap,
-              },
-            ];
-        if (useDoubleGap) {
-          baseTop = gaps[0].top;
-        }
-
+        const topHeight = 60 + Math.random() * 200;
         game.pipes.push({
-          baseX,
-          x: baseX,
-          baseTop,
-          top: baseTop,
-          gaps,
-          spacing,
-          movingY,
-          movingX,
-          phaseY: Math.random() * Math.PI * 2,
-          phaseX: Math.random() * Math.PI * 2,
-          tierIndex,
+          x: canvas.width + 40,
+          top: topHeight,
           passed: false,
-          initialGaps: JSON.parse(JSON.stringify(gaps)),
-          isBonusPipe: false,
         });
       };
 
@@ -485,147 +147,32 @@
         const bird = game.bird;
         const withinX = bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + game.pipeWidth;
         if (!withinX) return false;
-        const gaps = pipe.gaps || [
-          {
-            top: pipe.top,
-            height: game.gap,
-          },
-        ];
-        const withinGap = gaps.some((gap) => {
-          const gapTop = gap.top;
-          const gapBottom = gap.top + gap.height;
-          return bird.y - bird.radius >= gapTop && bird.y + bird.radius <= gapBottom;
-        });
-        return !withinGap;
+        const gapTop = pipe.top;
+        const gapBottom = pipe.top + game.gap;
+        const hitTop = bird.y - bird.radius < gapTop;
+        const hitBottom = bird.y + bird.radius > gapBottom;
+        return hitTop || hitBottom;
       };
 
-      const handleHit = (now) => {
-        if (game.lives > 1) {
-          game.lives -= 1;
-          game.invincibleUntil = now + 1200;
-          game.bird.velocity = game.flapStrength;
-          game.bird.y = Math.min(Math.max(game.bird.y, 80), canvas.height - 120);
-          updateHud();
-        } else {
-          game.state = "over";
-        }
-      };
-
-      const updateGapsPosition = (pipe, delta) => {
-        const actualMinTop = 30;
-        const actualMaxTop = canvas.height - game.gap - 60;
-
-        const newGaps = pipe.gaps.map((gap, index) => {
-          const proposedTop = gap.top + delta;
-
-          let gapMinTop = actualMinTop;
-          let gapMaxTop = actualMaxTop - gap.height;
-
-          if (pipe.gaps.length > 1) {
-            const minSegment = 40;
-
-            if (index === 0) {
-              const secondGap = pipe.gaps[1];
-              gapMaxTop = Math.min(gapMaxTop, actualMaxTop - gap.height - minSegment - secondGap.height);
-            } else if (index === 1) {
-              const firstGap = pipe.gaps[0];
-              gapMinTop = Math.max(gapMinTop, firstGap.top + firstGap.height + minSegment);
-            }
-          }
-
-          const clampedTop = Math.max(gapMinTop, Math.min(gapMaxTop, proposedTop));
-
-          return {
-            top: clampedTop,
-            height: gap.height,
-          };
-        });
-
-        if (newGaps.length === 2) {
-          const gap1Bottom = newGaps[0].top + newGaps[0].height;
-          const gap2Top = newGaps[1].top;
-          const minSegment = 40;
-
-          if (gap2Top - gap1Bottom < minSegment) {
-            newGaps[1].top = gap1Bottom + minSegment;
-
-            if (newGaps[1].top + newGaps[1].height > actualMaxTop) {
-              newGaps[0].top = actualMaxTop - newGaps[1].height - minSegment - newGaps[0].height;
-            }
-          }
-        }
-
-        return newGaps;
-      };
-
-      const update = (now) => {
+      const update = () => {
         if (game.state === "running") {
-          const difficulty = getDifficultyConfig();
           game.bird.velocity += game.gravity;
           game.bird.y += game.bird.velocity;
           game.bird.tilt = Math.min(game.bird.velocity * 4, 18);
 
-          const lastPipe = game.pipes[game.pipes.length - 1];
-          const requiredSpacing = lastPipe ? lastPipe.spacing : difficulty.pipeSpacing;
-          if (!lastPipe || canvas.width - lastPipe.baseX >= requiredSpacing) {
+          if (game.frame % Math.floor(game.pipeSpacing / game.speed) === 0) {
             spawnPipe();
           }
 
-          const minTop = 50;
-          const maxTop = canvas.height - game.gap - 80;
-
           game.pipes.forEach((pipe) => {
-            pipe.baseX -= difficulty.speed;
-
-            if (pipe.movingY) {
-              pipe.phaseY += difficulty.moveSpeed;
-              const offset = Math.sin(pipe.phaseY) * game.moveAmplitude;
-              const proposedBaseTop = pipe.baseTop + offset;
-
-              if (pipe.gaps.length === 1) {
-                const clampedTop = Math.max(minTop, Math.min(maxTop, proposedBaseTop));
-                const delta = clampedTop - pipe.top;
-                pipe.top = clampedTop;
-                pipe.gaps[0].top = clampedTop;
-              } else {
-                const delta = proposedBaseTop - pipe.top;
-                pipe.gaps = updateGapsPosition(pipe, delta);
-                pipe.top = pipe.gaps[0].top;
-              }
-            }
-
-            if (pipe.movingX) {
-              pipe.phaseX += difficulty.moveSpeedX;
-              const offsetX = Math.sin(pipe.phaseX) * game.moveAmplitudeX;
-              pipe.x = pipe.baseX + offsetX;
-            } else {
-              pipe.x = pipe.baseX;
-            }
-
+            pipe.x -= game.speed;
             if (!pipe.passed && pipe.x + game.pipeWidth < game.bird.x) {
               pipe.passed = true;
               game.score += 1;
-
-              if (Math.floor(game.score / 10) > Math.floor(game.lastLifeScore / 10)) {
-                game.lives += 1;
-                game.lastLifeScore = game.score;
-                showBonusIndicator("❤️ +1");
-                updateHud();
-              }
-
               if (game.score > game.best) {
                 game.best = game.score;
-                localStorage.setItem(bestKey(game.mode), game.best);
+                localStorage.setItem("flappy-best", game.best);
               }
-
-              if (pipe.isBonusPipe) {
-                game.bonusStageProgress += 1;
-                if (game.bonusStageProgress >= 5) {
-                  game.inBonusStage = false;
-                  showBonusIndicator("✨ 完成！");
-                }
-              }
-
               updateHud();
             }
           });
@@ -635,10 +182,9 @@
           const hitPipe = game.pipes.some((pipe) => checkCollision(pipe));
           const hitGround = game.bird.y + game.bird.radius > canvas.height - 40;
           const hitSky = game.bird.y - game.bird.radius < 0;
-          const isInvincible = now < game.invincibleUntil;
 
-          if (!isInvincible && (hitPipe || hitGround || hitSky)) {
-            handleHit(now);
+          if (hitPipe || hitGround || hitSky) {
+            game.state = "over";
           }
         }
 
@@ -679,85 +225,23 @@
         }
       };
 
-      const pipeColors = [
-        { body: "#22c55e", cap: "#15803d" },
-        { body: "#fbbf24", cap: "#f59e0b" },
-        { body: "#ef4444", cap: "#dc2626" },
-        { body: "#a855f7", cap: "#7e22ce" },
-      ];
-
       const drawPipes = () => {
         game.pipes.forEach((pipe) => {
-          const isDoubleGap = pipe.gaps && pipe.gaps.length > 1 && !pipe.isBonusPipe;
+          ctx.fillStyle = "#22c55e";
+          ctx.fillRect(pipe.x, 0, game.pipeWidth, pipe.top);
+          ctx.fillRect(pipe.x, pipe.top + game.gap, game.pipeWidth, canvas.height - pipe.top - game.gap - 40);
 
-          let palette;
-          if (pipe.isBonusPipe) {
-            palette = { body: "#fbbf24", cap: "#f59e0b" };
-          } else {
-            palette = pipeColors[pipe.tierIndex % pipeColors.length];
-          }
-
-          const gaps = pipe.gaps || [
-            {
-              top: pipe.top,
-              height: game.gap,
-            },
-          ];
-          const sortedGaps = [...gaps].sort((a, b) => a.top - b.top);
-
-          let currentY = 0;
-
-          sortedGaps.forEach((gap) => {
-            if (gap.top > currentY) {
-              ctx.fillStyle = palette.body;
-              ctx.fillRect(pipe.x, currentY, game.pipeWidth, gap.top - currentY);
-            }
-
-            ctx.fillStyle = palette.cap;
-            ctx.fillRect(pipe.x - 4, gap.top - 12, game.pipeWidth + 8, 12);
-            ctx.fillRect(pipe.x - 4, gap.top + gap.height, game.pipeWidth + 8, 12);
-
-            currentY = gap.top + gap.height;
-          });
-
-          if (currentY < canvas.height - 40) {
-            ctx.fillStyle = palette.body;
-            ctx.fillRect(pipe.x, currentY, game.pipeWidth, canvas.height - currentY - 40);
-          }
-
-          if (pipe.isBonusPipe) {
-            const glowAlpha = 0.3 + 0.2 * Math.sin(game.frame / 10);
-            ctx.fillStyle = `rgba(251, 191, 36, ${glowAlpha})`;
-            ctx.fillRect(pipe.x - 2, 0, game.pipeWidth + 4, canvas.height - 40);
-          }
-
-          if (isDoubleGap && sortedGaps.length === 2) {
-            ctx.save();
-            const gap1Bottom = sortedGaps[0].top + sortedGaps[0].height;
-            const gap2Top = sortedGaps[1].top;
-            const middleY = (gap1Bottom + gap2Top) / 2;
-
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.4)";
-            ctx.lineWidth = 2;
-            ctx.setLineDash([8, 8]);
-            ctx.beginPath();
-            ctx.moveTo(pipe.x, middleY);
-            ctx.lineTo(pipe.x + game.pipeWidth, middleY);
-            ctx.stroke();
-            ctx.setLineDash([]);
-            ctx.restore();
-          }
+          ctx.fillStyle = "#15803d";
+          ctx.fillRect(pipe.x, pipe.top - 12, game.pipeWidth, 12);
+          ctx.fillRect(pipe.x, pipe.top + game.gap, game.pipeWidth, 12);
         });
       };
 
       const drawBird = () => {
         const { x, y, radius } = game.bird;
-        const isInvincible = performance.now() < game.invincibleUntil;
-        const flicker = isInvincible ? 0.5 + 0.4 * Math.sin(performance.now() / 80) : 1;
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate((Math.PI / 180) * game.bird.tilt);
-        ctx.globalAlpha = flicker;
 
         ctx.fillStyle = "#fbbf24";
         ctx.beginPath();
@@ -789,15 +273,6 @@
           drawCenteredText("游戏结束", 32, 220);
           drawCenteredText("点击重新开始", 18, 260);
         }
-
-        if (game.inBonusStage) {
-          ctx.save();
-          ctx.fillStyle = "rgba(251, 191, 36, 0.9)";
-          ctx.font = 'bold 20px "PingFang SC", "Microsoft YaHei", sans-serif';
-          ctx.textAlign = "center";
-          ctx.fillText(`🎁 奖励隧道 ${game.bonusStageProgress}/5`, canvas.width / 2, 30);
-          ctx.restore();
-        }
       };
 
       const drawCenteredText = (text, size, y) => {
@@ -809,48 +284,16 @@
         ctx.restore();
       };
 
-      const loop = (now) => {
-        update(now);
+      const loop = () => {
+        update();
         draw();
         requestAnimationFrame(loop);
-      };
-
-      const handleCheatInput = (key) => {
-        if (game.cheatTimeout) {
-          clearTimeout(game.cheatTimeout);
-        }
-
-        game.cheatInput += key.toLowerCase();
-
-        if (game.cheatInput.length > 4) {
-          game.cheatInput = game.cheatInput.slice(-4);
-        }
-
-        if (game.cheatInput === "gfsk") {
-          game.cheatEnabled = true;
-          showBonusIndicator("🔓 作弊模式");
-          game.cheatInput = "";
-        }
-
-        game.cheatTimeout = setTimeout(() => {
-          game.cheatInput = "";
-        }, 2000);
       };
 
       window.addEventListener("keydown", (event) => {
         if (event.code === "Space") {
           event.preventDefault();
           flap();
-        }
-
-        if (event.key.length === 1 && /^[a-z]$/i.test(event.key)) {
-          handleCheatInput(event.key);
-        }
-
-        if (event.key.toLowerCase() === "c" && game.cheatEnabled) {
-          game.lives += 1;
-          showBonusIndicator("❤️ 作弊 +1");
-          updateHud();
         }
       });
 
@@ -862,15 +305,8 @@
         resetGame();
       });
 
-      toggleModeBtn.addEventListener("click", () => {
-        const nextMode = game.mode === "hard" ? "normal" : "hard";
-        applyMode(nextMode);
-        resetGame();
-      });
-
-      applyMode("normal");
       updateHud();
-      loop(performance.now());
+      loop();
     </script>
   </body>
 </html>
