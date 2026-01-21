@@ -164,6 +164,7 @@
           tilt: 0,
         },
         pipes: [],
+        hearts: [],
         frame: 0,
         lastLifeScore: 0,
         cheatEnabled: false,
@@ -179,8 +180,8 @@
         if (mode === "hard") {
           game.speed = 2.8;
           game.gap = 125;
-          game.pipeSpacing = 170;
-          game.minSpacing = 140;
+          game.pipeSpacing = 200;
+          game.minSpacing = 160;
           game.movingChance = 0.45;
           game.moveAmplitude = 42;
           game.moveSpeed = 0.025;
@@ -190,8 +191,8 @@
         } else {
           game.speed = 2.4;
           game.gap = 140;
-          game.pipeSpacing = 190;
-          game.minSpacing = 150;
+          game.pipeSpacing = 220;
+          game.minSpacing = 170;
           game.movingChance = 0;
           game.moveAmplitude = 0;
           game.moveSpeed = 0;
@@ -207,8 +208,8 @@
         const tier = game.mode === "hard" ? Math.floor(game.score / 20) : 0;
         const tierBoost = Math.min(tier, 5);
         const speed = game.speed * (1 + tierBoost * 0.08);
-        const pipeSpacing = Math.max(120, game.pipeSpacing - tierBoost * 10);
-        const minSpacing = Math.max(100, game.minSpacing - tierBoost * 5);
+        const pipeSpacing = Math.max(150, game.pipeSpacing - tierBoost * 6);
+        const minSpacing = Math.max(120, game.minSpacing - tierBoost * 3);
         const moveSpeed = game.moveSpeed * (1 + tierBoost * 0.12);
         const moveSpeedX = game.moveSpeedX * (1 + tierBoost * 0.12);
 
@@ -231,6 +232,7 @@
         game.bird.velocity = 0;
         game.bird.tilt = 0;
         game.pipes = [];
+        game.hearts = [];
         game.frame = 0;
         game.lastLifeScore = 0;
         game.inBonusStage = false;
@@ -454,6 +456,17 @@
           baseTop = gaps[0].top;
         }
 
+        const heartChance = 0.12;
+        const shouldSpawnHeart = Math.random() < heartChance;
+        const heartGap = gaps[Math.floor(Math.random() * gaps.length)];
+        if (shouldSpawnHeart && heartGap) {
+          game.hearts.push({
+            x: baseX + game.pipeWidth / 2,
+            y: heartGap.top + heartGap.height / 2,
+            radius: 10,
+          });
+        }
+
         game.pipes.push({
           baseX,
           x: baseX,
@@ -606,13 +619,6 @@
               pipe.passed = true;
               game.score += 1;
 
-              const lifeRewardChance = game.mode === "hard" ? 0.03 : 0.015;
-              if (Math.random() < lifeRewardChance) {
-                game.lives += 1;
-                showBonusIndicator("❤️ +1");
-                updateHud();
-              }
-
               if (game.score > game.best) {
                 game.best = game.score;
                 localStorage.setItem(bestKey(game.mode), game.best);
@@ -631,6 +637,25 @@
           });
 
           game.pipes = game.pipes.filter((pipe) => pipe.x + game.pipeWidth > -20);
+          game.hearts = game.hearts
+            .map((heart) => ({
+              ...heart,
+              x: heart.x - difficulty.speed,
+            }))
+            .filter((heart) => heart.x + heart.radius > -20);
+
+          game.hearts = game.hearts.filter((heart) => {
+            const dx = game.bird.x - heart.x;
+            const dy = game.bird.y - heart.y;
+            const distance = Math.hypot(dx, dy);
+            if (distance < game.bird.radius + heart.radius) {
+              game.lives += 1;
+              showBonusIndicator("❤️ +1");
+              updateHud();
+              return false;
+            }
+            return true;
+          });
 
           const hitPipe = game.pipes.some((pipe) => checkCollision(pipe));
           const hitGround = game.bird.y + game.bird.radius > canvas.height - 40;
@@ -657,6 +682,7 @@
         drawBackdrop();
         drawGround();
         drawPipes();
+        drawHearts();
         drawBird();
         drawOverlay();
       };
@@ -747,6 +773,33 @@
             ctx.setLineDash([]);
             ctx.restore();
           }
+        });
+      };
+
+      const drawHearts = () => {
+        game.hearts.forEach((heart) => {
+          ctx.save();
+          ctx.fillStyle = "#fb7185";
+          ctx.beginPath();
+          ctx.moveTo(heart.x, heart.y + heart.radius / 2);
+          ctx.bezierCurveTo(
+            heart.x + heart.radius,
+            heart.y - heart.radius / 2,
+            heart.x + heart.radius * 1.6,
+            heart.y + heart.radius / 2,
+            heart.x,
+            heart.y + heart.radius * 1.6
+          );
+          ctx.bezierCurveTo(
+            heart.x - heart.radius * 1.6,
+            heart.y + heart.radius / 2,
+            heart.x - heart.radius,
+            heart.y - heart.radius / 2,
+            heart.x,
+            heart.y + heart.radius / 2
+          );
+          ctx.fill();
+          ctx.restore();
         });
       };
 
